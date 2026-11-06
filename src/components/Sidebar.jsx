@@ -164,11 +164,7 @@ const Sidebar = ({ onClose, isCollapsed }) => {
               text="Inscripciones"
               to="/inscripciones"
             />
-            <SidebarItem
-              icon={LuCalendarDays}
-              text="Horarios y Aulas"
-              to="/horarios"
-            />
+            <SidebarItem icon={LuCalendarDays} text="Horarios" to="/horarios" />
             <SidebarItem icon={LuMapPin} text="Aulas" to="/aulas" />
           </SidebarDropdown>
 

@@ -1,6 +1,6 @@
-import axios from "axios";
+import { api } from "../../services/api";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+/*const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -14,7 +14,7 @@ api.interceptors.request.use((config) => {
     config.headers["X-XSRF-TOKEN"] = decodeURIComponent(match[1]);
   }
   return config;
-});
+  });*/
 
 export const login = async (loginData) => {
   const response = await api.post("/api/login", loginData);
@@ -31,7 +31,7 @@ export const twofactor = async (verificationCode, userId) => {
 };
 
 export const resendTwoFactorCode = async (userId) => {
-  const response = await axios.post("/api/resend2fa", { user_id: userId });
+  const response = await api.post("/api/resend2fa", { user_id: userId });
   return response.data;
 };
 

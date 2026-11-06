@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-//import { login } from "./api";
 import { FaUserLarge, FaLock, FaEyeSlash, FaEye } from "react-icons/fa6";
 import logo from "../../assets/images/logo_itibb.webp";
 import fotoItibb from "../../assets/images/foto_itibb.webp";
@@ -47,6 +46,7 @@ const Login = () => {
       const response = await loginStore(loginData);
       if (response.success) {
         sessionStorage.setItem("user_id", response.user_id);
+        sessionStorage.setItem("2fa_expires_at", response.expires_at);
         navigate("/twofactorcode", { replace: true });
       } else {
         setLoginErrors({

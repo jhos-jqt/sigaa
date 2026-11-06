@@ -6,11 +6,16 @@ const AuthRoutes = ({ children }) => {
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
+  // 1. Si no está inicializado, muestra un loader (o null)
   if (!isInitialized) return null;
-  if (!isAuthenticated()) {
-    return children;
+
+  // 2. Si YA está autenticado (tiene token), lo mandamos al home
+  if (isAuthenticated()) {
+    return <Navigate to="/home" state={{ from: location }} replace />;
   }
-  return <Navigate to="/home" state={{ from: location }} />;
+
+  // 3. Si NO está autenticado, lo dejamos pasar (Login, 2FA, etc.)
+  return children;
 };
 
 export default AuthRoutes;

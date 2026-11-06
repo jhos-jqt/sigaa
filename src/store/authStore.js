@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api } from "../features/auth/api";
+import { api } from "../services/api";
 
 const useAuthStore = create((set, get) => ({
   userAuth: {},
@@ -15,6 +15,7 @@ const useAuthStore = create((set, get) => ({
       roleAuth: data.role ?? [],
       permissionsAuth: data.permissions ?? [],
       avatarAuth: data.avatar ?? null,
+      isInitialized: true,
     });
   },
 
@@ -74,6 +75,7 @@ const useAuthStore = create((set, get) => ({
       roleAuth: data.role ?? [],
       permissionsAuth: data.permissions ?? [],
       avatarAuth: data.avatar ?? null,
+      isInitialized: true,
     });
     return data;
   },
@@ -88,6 +90,7 @@ const useAuthStore = create((set, get) => ({
       await api.post("/api/logout");
     } finally {
       sessionStorage.removeItem("user_id");
+      sessionStorage.removeItem("2fa_expires_at");
       get().logoutAuth();
     }
   },

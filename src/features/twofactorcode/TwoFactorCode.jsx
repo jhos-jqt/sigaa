@@ -4,15 +4,6 @@ import { FaArrowLeft } from "react-icons/fa6";
 import useAuthStore from "../../store/authStore";
 import logo from "../../assets/images/logo_itibb.webp";
 import Loader from "../../components/Loader";
-//import Swal from "sweetalert2"; // ajusta según tu setup de Toast
-
-/*const Toast = Swal.mixin({
-  toast: true,
-  position: "top-end",
-  showConfirmButton: false,
-  timer: 3000,
-  timerProgressBar: true,
-});*/
 
 const CODE_EXPIRATION_SECONDS = 120;
 
@@ -31,18 +22,28 @@ const TwoFactorCode = () => {
   const [timeLeft, setTimeLeft] = useState(0);
 
   const inputRefs = useRef([]);
-  const expiresAtRef = useRef(Date.now() + CODE_EXPIRATION_SECONDS * 1000);
   const navigate = useNavigate();
 
   const verifyTwoFactor = useAuthStore((s) => s.verifyTwoFactor);
   const resend2FA = useAuthStore((s) => s.resend2FA);
 
-  // Loader inicial + contador
+  useEffect(() => {
+    if (!sessionStorage.getItem("user_id")) {
+      navigate("/", { replace: true });
+    }
+  }, [navigate]);
+
   useEffect(() => {
     const initTimer = setTimeout(() => setIsLoading(false), 1200);
 
+    const expiresAtStr = sessionStorage.getItem("2fa_expires_at");
+    const parsed = expiresAtStr ? new Date(expiresAtStr).getTime() : NaN;
+    const expiresAt = Number.isFinite(parsed)
+      ? parsed
+      : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
+
     const tick = () => {
-      const diff = Math.floor((expiresAtRef.current - Date.now()) / 1000);
+      const diff = Math.floor((expiresAt - Date.now()) / 1000);
       setTimeLeft(diff > 0 ? diff : 0);
     };
     tick();
@@ -61,34 +62,37 @@ const TwoFactorCode = () => {
   };
 
   const handleChange = (index) => (e) => {
-    const val = e.target.value.toUpperCase();
+    const val = e.target.value.slice(-1).toUpperCase();
     if (/^[A-Z0-9]?$/.test(val)) {
       const newCode = [...code];
       newCode[index] = val;
       setCode(newCode);
       if (val && index < inputRefs.current.length - 1) {
-        inputRefs.current[index + 1].focus();
+        setTimeout(() => {
+          inputRefs.current[index + 1]?.focus();
+        }, 10);
       }
     }
   };
 
   const handleKeyDown = (index) => (e) => {
-    if (e.key === "Backspace" && !code[index] && index > 0) {
-      inputRefs.current[index - 1].focus();
-    }
-    if (e.key === "ArrowLeft" && index > 0) {
+    if (e.key === "Backspace") {
+      if (!code[index] && index > 0) {
+        e.preventDefault();
+        inputRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && index > 0) {
       e.preventDefault();
-      inputRefs.current[index - 1].focus();
-    }
-    if (e.key === "ArrowRight" && index < inputRefs.current.length - 1) {
+      inputRefs.current[index - 1]?.focus();
+    } else if (e.key === "ArrowRight" && index < inputRefs.current.length - 1) {
       e.preventDefault();
-      inputRefs.current[index + 1].focus();
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const verificationCode = code.join("");
+    const verificationCode = code.join("").toUpperCase();
     const userId = sessionStorage.getItem("user_id");
 
     if (!userId) {
@@ -112,6 +116,7 @@ const TwoFactorCode = () => {
         two_factor_code: verificationCode,
       });
       sessionStorage.removeItem("user_id");
+      sessionStorage.removeItem("2fa_expires_at");
       navigate("/home", { replace: true });
     } catch (error) {
       const status = error.response?.status;
@@ -148,16 +153,15 @@ const TwoFactorCode = () => {
     setButtonResendText("Enviando...");
     setCodeErrors({ user_id: "", two_factor_code: "", general: "" });
 
+    let res = null;
+    let resendOk = false;
+
     try {
-      await resend2FA(userId);
-      Toast.fire({
-        icon: "success",
-        title: "Código enviado. Verifique su correo electrónico.",
-      });
-      setCode(["", "", "", "", "", ""]);
-      inputRefs.current[0]?.focus();
-      expiresAtRef.current = Date.now() + CODE_EXPIRATION_SECONDS * 1000;
-      setTimeLeft(CODE_EXPIRATION_SECONDS);
+      res = await resend2FA(userId);
+      if (res?.expires_at) {
+        sessionStorage.setItem("2fa_expires_at", res.expires_at);
+      }
+      resendOk = true;
     } catch (error) {
       const status = error.response?.status;
       if (status === 429) {
@@ -172,6 +176,27 @@ const TwoFactorCode = () => {
     } finally {
       setButtonResendText("Solicitar Código");
       setButtonResendDisabled(false);
+    }
+
+    if (resendOk) {
+      Toast.fire({
+        icon: "success",
+        title: "Código enviado. Verifique su correo electrónico.",
+      });
+
+      setCode(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+
+      const newExpiresAt = res?.expires_at
+        ? new Date(res.expires_at).getTime()
+        : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
+
+      const parsed = Number.isFinite(newExpiresAt)
+        ? newExpiresAt
+        : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
+
+      const diff = Math.floor((parsed - Date.now()) / 1000);
+      setTimeLeft(diff > 0 ? diff : 0);
     }
   };
 
@@ -254,12 +279,25 @@ const TwoFactorCode = () => {
                       ref={(el) => (inputRefs.current[index] = el)}
                       type="text"
                       inputMode="text"
-                      value={digit}
+                      value={digit || ""}
                       onChange={handleChange(index)}
                       onKeyDown={handleKeyDown(index)}
-                      className="w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold uppercase bg-slate-50 border border-slate-300 rounded-xl text-slate-900 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue hover:border-slate-400"
+                      className="
+                        w-12 h-14 sm:w-14 sm:h-16
+                        text-center text-2xl font-bold
+                        bg-slate-50 border border-slate-300 rounded-xl text-slate-900
+                        caret-navy-blue
+                        transition-colors duration-200
+                        focus:outline-none focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue
+                        hover:border-navy-blue
+                        select-none
+                        uppercase cursor-pointer
+                      "
                       maxLength={1}
                       autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="on"
+                      spellCheck="false"
                     />
                   ))}
                 </div>
@@ -302,6 +340,10 @@ const TwoFactorCode = () => {
               <div className="mt-6 text-center">
                 <Link
                   to="/"
+                  onClick={() => {
+                    sessionStorage.removeItem("user_id");
+                    sessionStorage.removeItem("2fa_expires_at");
+                  }}
                   className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-navy-blue transition-colors"
                 >
                   <FaArrowLeft className="text-xs" />
