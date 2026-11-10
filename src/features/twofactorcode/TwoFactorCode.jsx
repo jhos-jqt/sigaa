@@ -22,28 +22,34 @@ const TwoFactorCode = () => {
   const [timeLeft, setTimeLeft] = useState(0);
 
   const inputRefs = useRef([]);
+  const expiresAtRef = useRef(Date.now() + CODE_EXPIRATION_SECONDS * 1000);
   const navigate = useNavigate();
 
   const verifyTwoFactor = useAuthStore((s) => s.verifyTwoFactor);
   const resend2FA = useAuthStore((s) => s.resend2FA);
 
+  // Redirección temprana si no hay user_id
   useEffect(() => {
     if (!sessionStorage.getItem("user_id")) {
       navigate("/", { replace: true });
     }
   }, [navigate]);
 
+  // Inicializar expiresAtRef desde sessionStorage (una sola vez)
+  useEffect(() => {
+    const expiresAtStr = sessionStorage.getItem("2fa_expires_at");
+    const parsed = expiresAtStr ? new Date(expiresAtStr).getTime() : NaN;
+    if (Number.isFinite(parsed)) {
+      expiresAtRef.current = parsed;
+    }
+  }, []);
+
+  // Loader inicial + timer leyendo desde el ref
   useEffect(() => {
     const initTimer = setTimeout(() => setIsLoading(false), 1200);
 
-    const expiresAtStr = sessionStorage.getItem("2fa_expires_at");
-    const parsed = expiresAtStr ? new Date(expiresAtStr).getTime() : NaN;
-    const expiresAt = Number.isFinite(parsed)
-      ? parsed
-      : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
-
     const tick = () => {
-      const diff = Math.floor((expiresAt - Date.now()) / 1000);
+      const diff = Math.floor((expiresAtRef.current - Date.now()) / 1000);
       setTimeLeft(diff > 0 ? diff : 0);
     };
     tick();
@@ -62,23 +68,58 @@ const TwoFactorCode = () => {
   };
 
   const handleChange = (index) => (e) => {
-    const val = e.target.value.slice(-1).toUpperCase();
-    if (/^[A-Z0-9]?$/.test(val)) {
+    const raw = e.target.value;
+
+    // Pegado de varios caracteres
+    if (raw.length > 1) {
+      const chars = raw
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .toUpperCase()
+        .slice(0, 6)
+        .split("");
+
+      if (chars.length === 0) return;
+
       const newCode = [...code];
-      newCode[index] = val;
+      chars.forEach((ch, i) => {
+        if (index + i < newCode.length) newCode[index + i] = ch;
+      });
+
       setCode(newCode);
-      if (val && index < inputRefs.current.length - 1) {
-        setTimeout(() => {
-          inputRefs.current[index + 1]?.focus();
-        }, 10);
-      }
+
+      const nextIndex = Math.min(
+        index + chars.length,
+        inputRefs.current.length - 1,
+      );
+      setTimeout(() => inputRefs.current[nextIndex]?.focus(), 10);
+      return;
+    }
+
+    // Escritura normal (reemplaza el valor actual)
+    const val = raw.slice(-1).toUpperCase();
+    if (!/^[A-Z0-9]?$/.test(val)) return;
+
+    const newCode = [...code];
+    newCode[index] = val;
+    setCode(newCode);
+
+    if (val && index < inputRefs.current.length - 1) {
+      setTimeout(() => inputRefs.current[index + 1]?.focus(), 10);
     }
   };
 
   const handleKeyDown = (index) => (e) => {
     if (e.key === "Backspace") {
-      if (!code[index] && index > 0) {
+      if (code[index]) {
+        const newCode = [...code];
+        newCode[index] = "";
+        setCode(newCode);
         e.preventDefault();
+      } else if (index > 0) {
+        e.preventDefault();
+        const newCode = [...code];
+        newCode[index - 1] = "";
+        setCode(newCode);
         inputRefs.current[index - 1]?.focus();
       }
     } else if (e.key === "ArrowLeft" && index > 0) {
@@ -158,15 +199,16 @@ const TwoFactorCode = () => {
 
     try {
       res = await resend2FA(userId);
-      if (res?.expires_at) {
-        sessionStorage.setItem("2fa_expires_at", res.expires_at);
-      }
       resendOk = true;
     } catch (error) {
       const status = error.response?.status;
       if (status === 429) {
         setCodeErrors({
           general: "Demasiadas solicitudes. Espere un momento.",
+        });
+      } else if (status === 419) {
+        setCodeErrors({
+          general: "Sesión expirada. Recargue la página.",
         });
       } else {
         setCodeErrors({
@@ -178,25 +220,38 @@ const TwoFactorCode = () => {
       setButtonResendDisabled(false);
     }
 
-    if (resendOk) {
+    if (!resendOk) return;
+
+    // Reenvío exitoso: limpiar errores, inputs y refrescar expiración
+    setCodeErrors({ user_id: "", two_factor_code: "", general: "" });
+    setCode(["", "", "", "", "", ""]);
+    inputRefs.current[0]?.focus();
+
+    const newExpiresAt = res?.expires_at
+      ? new Date(res.expires_at).getTime()
+      : NaN;
+
+    const finalExpiresAt = Number.isFinite(newExpiresAt)
+      ? newExpiresAt
+      : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
+
+    // 🔑 CLAVE: actualizar el ref para que el setInterval lo lea en el próximo tick
+    expiresAtRef.current = finalExpiresAt;
+
+    if (res?.expires_at) {
+      sessionStorage.setItem("2fa_expires_at", res.expires_at);
+    }
+
+    const diff = Math.floor((finalExpiresAt - Date.now()) / 1000);
+    setTimeLeft(diff > 0 ? diff : 0);
+
+    try {
       Toast.fire({
         icon: "success",
         title: "Código enviado. Verifique su correo electrónico.",
       });
-
-      setCode(["", "", "", "", "", ""]);
-      inputRefs.current[0]?.focus();
-
-      const newExpiresAt = res?.expires_at
-        ? new Date(res.expires_at).getTime()
-        : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
-
-      const parsed = Number.isFinite(newExpiresAt)
-        ? newExpiresAt
-        : Date.now() + CODE_EXPIRATION_SECONDS * 1000;
-
-      const diff = Math.floor((parsed - Date.now()) / 1000);
-      setTimeLeft(diff > 0 ? diff : 0);
+    } catch {
+      // si el toast falla, no rompe el flujo
     }
   };
 
@@ -282,6 +337,7 @@ const TwoFactorCode = () => {
                       value={digit || ""}
                       onChange={handleChange(index)}
                       onKeyDown={handleKeyDown(index)}
+                      onFocus={(e) => e.target.select()}
                       className="
                         w-12 h-14 sm:w-14 sm:h-16
                         text-center text-2xl font-bold
@@ -295,9 +351,6 @@ const TwoFactorCode = () => {
                       "
                       maxLength={1}
                       autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="on"
-                      spellCheck="false"
                     />
                   ))}
                 </div>
