@@ -2,10 +2,8 @@ import { api } from "../../services/api";
 
 const API_URL = "/api/carreras";
 
-export const fetchCarreras = async ({ page = 1, search = "" }) => {
-  const { data } = await api.get(API_URL, {
-    params: { page, search },
-  });
+export const fetchCarreras = async () => {
+  const { data } = await api.get(API_URL);
   return data;
 };
 

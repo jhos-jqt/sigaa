@@ -12,40 +12,31 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
   const initialState = {
     sigla: "",
     nombre: "",
-    nivel: "tecnico_superior",
-    sector_productivo: "industrial",
-    modalidad: "presencial",
-    regimen: "semestral",
+    nivel: "",
+    sector_productivo: "",
+    modalidad: "",
+    regimen: "",
     resolucion: "",
-    carga_horaria_semanal: "",
-    carga_horaria_mensual: "",
-    carga_horaria_semestral: "",
-    carga_horaria_total: "",
     logo: null,
   };
 
   const [formData, setFormData] = useState(initialState);
   const [previewImage, setPreviewImage] = useState(null);
-  const [error, setError] = useState(null);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (carreraToEdit) {
       setFormData({
         sigla: carreraToEdit.sigla || "",
         nombre: carreraToEdit.nombre || "",
-        nivel: carreraToEdit.nivel || "tecnico_superior",
-        sector_productivo: carreraToEdit.sector_productivo || "industrial",
-        modalidad: carreraToEdit.modalidad || "presencial",
-        regimen: carreraToEdit.regimen || "semestral",
+        nivel: carreraToEdit.nivel || "",
+        sector_productivo: carreraToEdit.sector_productivo || "",
+        modalidad: carreraToEdit.modalidad || "",
+        regimen: carreraToEdit.regimen || "",
         resolucion: carreraToEdit.resolucion || "",
-        carga_horaria_semanal: carreraToEdit.carga_horaria_semanal || "",
-        carga_horaria_mensual: carreraToEdit.carga_horaria_mensual || "",
-        carga_horaria_semestral: carreraToEdit.carga_horaria_semestral || "",
-        carga_horaria_total: carreraToEdit.carga_horaria_total || "",
-        logo: null, // El archivo no se puede pre-cargar por seguridad del navegador
+        logo: null,
       });
 
-      // Si la carrera ya tiene un logo guardado, lo mostramos en la vista previa
       setPreviewImage(
         carreraToEdit.logo
           ? `${API_URL}/storage/${carreraToEdit.logo.ruta}`
@@ -55,7 +46,7 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
       setFormData(initialState);
       setPreviewImage(null);
     }
-    setError(null);
+    setErrors({});
   }, [carreraToEdit, isOpen]);
 
   const handleImageChange = (e) => {
@@ -83,17 +74,26 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
       onClose();
     },
     onError: (err) => {
-      console.log("STATUS:", err.response?.status);
-      console.log("DATA:", err.response?.data); // Aquí verás el error real de Laravel
-      console.log("ERROR COMPLETO:", err);
-      setError("Revisa la consola para ver el error detallado.");
+      if (err.response?.data?.errors) {
+        setErrors(err.response.data.errors);
+      } else {
+        setErrors({
+          general: [
+            err.response?.data?.message || "Ocurrió un error inesperado.",
+          ],
+        });
+      }
     },
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setErrors({});
 
+    // 1. Creamos el objeto FormData
     const data = new FormData();
+
+    // 2. Agregamos todos los campos
     data.append("sigla", formData.sigla);
     data.append("nombre", formData.nombre);
     data.append("nivel", formData.nivel);
@@ -101,17 +101,17 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
     data.append("modalidad", formData.modalidad);
     data.append("regimen", formData.regimen);
 
-    if (formData.resolucion) data.append("resolucion", formData.resolucion);
-    if (formData.carga_horaria_semanal)
-      data.append("carga_horaria_semanal", formData.carga_horaria_semanal);
-    if (formData.carga_horaria_mensual)
-      data.append("carga_horaria_mensual", formData.carga_horaria_mensual);
-    if (formData.carga_horaria_semestral)
-      data.append("carga_horaria_semestral", formData.carga_horaria_semestral);
-    if (formData.carga_horaria_total)
-      data.append("carga_horaria_total", formData.carga_horaria_total);
-    if (formData.logo) data.append("logo", formData.logo);
+    // Agregamos la resolución solo si tiene valor (porque es opcional)
+    if (formData.resolucion) {
+      data.append("resolucion", formData.resolucion);
+    }
 
+    // 3. Agregamos el archivo SOLO si el usuario seleccionó uno
+    if (formData.logo) {
+      data.append("logo", formData.logo);
+    }
+
+    // 4. Enviamos el FormData a la mutación
     if (carreraToEdit) {
       mutation.mutate({ id: carreraToEdit.id, formData: data });
     } else {
@@ -120,6 +120,12 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
   };
 
   if (!isOpen) return null;
+
+  const renderError = (field) => {
+    if (errors[field]) {
+      return <p className="mt-1 text-xs text-red-500">{errors[field][0]}</p>;
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
@@ -138,55 +144,67 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
           </button>
         </div>
 
-        {/* Formulario */}
         <form
           onSubmit={handleSubmit}
           className="p-5 space-y-5 overflow-y-auto custom-scrollbar"
         >
-          {error && (
+          {errors.general && (
             <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
-              {error}
+              {errors.general[0]}
             </div>
           )}
 
-          {/* Subida de Logo */}
-          <div className="flex items-center gap-4 p-4 border border-dashed border-slate-300 rounded-xl bg-slate-50">
-            <div className="w-16 h-16 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-              {previewImage ? (
-                <img
-                  src={previewImage}
-                  alt="Logo"
-                  className="w-full h-full object-contain"
+          <div>
+            <div
+              className={`flex items-center gap-4 p-4 border border-dashed rounded-xl transition-colors ${
+                errors.logo
+                  ? "border-red-400 bg-red-50"
+                  : "border-slate-300 bg-slate-50"
+              }`}
+            >
+              <div className="w-16 h-16 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                {previewImage ? (
+                  <img
+                    src={previewImage}
+                    alt="Logo"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <LuImage className="w-8 h-8 text-slate-300" />
+                )}
+              </div>
+              <div className="flex-1">
+                <p
+                  className={`text-sm font-medium mb-1 ${errors.logo ? "text-red-700" : "text-slate-700"}`}
+                >
+                  Logo de la Carrera
+                </p>
+                <p className="text-xs text-slate-500 mb-2">
+                  PNG, JPG o WEBP (Max 2MB)
+                </p>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleImageChange}
                 />
-              ) : (
-                <LuImage className="w-8 h-8 text-slate-300" />
-              )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current.click()}
+                  className={`flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${
+                    errors.logo
+                      ? "bg-red-100 text-red-700 hover:bg-red-200"
+                      : "bg-navy-blue/10 text-navy-blue hover:bg-navy-blue/20"
+                  }`}
+                >
+                  <LuUpload className="w-3 h-3" /> Subir Imagen
+                </button>
+              </div>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-slate-700 mb-1">
-                Logo de la Carrera
-              </p>
-              <p className="text-xs text-slate-500 mb-2">
-                PNG, JPG o WEBP (Max 2MB)
-              </p>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleImageChange}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current.click()}
-                className="flex items-center gap-1 text-xs font-semibold text-navy-blue bg-navy-blue/10 px-3 py-1.5 rounded-md hover:bg-navy-blue/20 transition-colors"
-              >
-                <LuUpload className="w-3 h-3" /> Subir Imagen
-              </button>
-            </div>
+            {renderError("logo")}
           </div>
 
-          {/* Sección 1: Datos Básicos */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
               1. Datos Básicos
@@ -198,7 +216,6 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
                 </label>
                 <input
                   type="text"
-                  required
                   value={formData.sigla || ""}
                   onChange={(e) =>
                     setFormData({
@@ -206,9 +223,10 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
                       sigla: e.target.value.toUpperCase(),
                     })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.sigla ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                   placeholder="EJ. EMC"
                 />
+                {renderError("sigla")}
               </div>
               <div className="col-span-2">
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -216,14 +234,14 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
                 </label>
                 <input
                   type="text"
-                  required
                   value={formData.nombre || ""}
                   onChange={(e) =>
                     setFormData({ ...formData, nombre: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.nombre ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                   placeholder="EJ. ELECTROMECÁNICA"
                 />
+                {renderError("nombre")}
               </div>
             </div>
 
@@ -233,15 +251,19 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
                   Nivel *
                 </label>
                 <select
-                  value={formData.nivel || "tecnico_superior"}
+                  value={formData.nivel}
                   onChange={(e) =>
                     setFormData({ ...formData, nivel: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.nivel ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                 >
-                  <option value="tecnico_medio">Técnico Medio</option>
-                  <option value="tecnico_superior">Técnico Superior</option>
+                  <option value="" selected hidden>
+                    -- SELECCIONAR --
+                  </option>
+                  <option value="tecnico_medio">TÉCNICO MEDIO</option>
+                  <option value="tecnico_superior">TÉCNICO SUPERIOR</option>
                 </select>
+                {renderError("nivel")}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -253,156 +275,84 @@ const CarreraModal = ({ isOpen, onClose, carreraToEdit }) => {
                   onChange={(e) =>
                     setFormData({ ...formData, resolucion: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.resolucion ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                   placeholder="EJ. RM 045/2024"
                 />
+                {renderError("resolucion")}
               </div>
             </div>
           </div>
 
-          {/* Sección 2: Clasificación */}
           <div className="space-y-4 pt-4 border-t border-slate-100">
             <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
               2. Clasificación
             </h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Sector Productivo *
                 </label>
                 <select
-                  value={formData.sector_productivo || "industrial"}
+                  value={formData.sector_productivo || ""}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
                       sector_productivo: e.target.value,
                     })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.sector_productivo ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                 >
-                  <option value="industrial">Industrial</option>
-                  <option value="comercial">Comercial</option>
-                  <option value="servicios">Servicios</option>
-                  <option value="agropecuaria">Agropecuaria</option>
+                  <option value="" selected hidden>
+                    -- Seleccionar --
+                  </option>
+                  <option value="industrial">INDUSTRIAL</option>
+                  <option value="comercial">COMERCIAL</option>
+                  <option value="servicios">SERVICIOS</option>
+                  <option value="agropecuaria">AGROPECUARIA</option>
                 </select>
+                {renderError("sector_productivo")}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Modalidad *
                 </label>
                 <select
-                  value={formData.modalidad || "presencial"}
+                  value={formData.modalidad || ""}
                   onChange={(e) =>
                     setFormData({ ...formData, modalidad: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.modalidad ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                 >
-                  <option value="presencial">Presencial</option>
-                  <option value="semipresencial">Semipresencial</option>
-                  <option value="virtual">Virtual</option>
-                  <option value="distancia">A Distancia</option>
+                  <option value="">-- Seleccionar --</option>
+                  <option value="presencial">PRESENCIAL</option>
+                  <option value="semipresencial">SEMIPRESENCIAL</option>
+                  <option value="virtual">VIRTUAL</option>
+                  <option value="distancia">A DISTANCIA</option>
                 </select>
+                {renderError("modalidad")}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Régimen *
                 </label>
                 <select
-                  value={formData.regimen || "semestral"}
+                  value={formData.regimen || ""}
                   onChange={(e) =>
                     setFormData({ ...formData, regimen: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase"
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${errors.regimen ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300"}`}
                 >
-                  <option value="semestral">Semestral</option>
-                  <option value="anual">Anual</option>
+                  <option value="" selected hidden>
+                    -- Seleccionar --
+                  </option>
+                  <option value="semestral">SEMESTRAL</option>
+                  <option value="anual">ANUAL</option>
                 </select>
+                {renderError("regimen")}
               </div>
             </div>
           </div>
 
-          {/* Sección 3: Carga Horaria */}
-          <div className="space-y-4 pt-4 border-t border-slate-100">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
-              3. Carga Horaria
-            </h3>
-            <div className="grid grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Semanal
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.carga_horaria_semanal || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      carga_horaria_semanal: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
-                  placeholder="HRS"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Mensual
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.carga_horaria_mensual || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      carga_horaria_mensual: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
-                  placeholder="HRS"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Semestral
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.carga_horaria_semestral || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      carga_horaria_semestral: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
-                  placeholder="HRS"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Total
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.carga_horaria_total || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      carga_horaria_total: e.target.value,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
-                  placeholder="HRS"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
           <div className="flex justify-end gap-3 pt-5 border-t border-slate-100">
             <button
               type="button"

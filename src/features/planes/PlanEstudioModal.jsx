@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import Select from "react-select";
 import { createPlan, updatePlan, fetchCarrerasSelect } from "./api";
 import { LuX } from "react-icons/lu";
 
@@ -19,11 +20,11 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
     resolucion: "",
     total_semestres: "",
     carga_horaria_total: "",
-    estado: "vigente",
+    estado: "",
   };
 
   const [formData, setFormData] = useState(initialState);
-  const [error, setError] = useState(null);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (planToEdit) {
@@ -33,12 +34,12 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
         resolucion: planToEdit.resolucion || "",
         total_semestres: planToEdit.total_semestres || "",
         carga_horaria_total: planToEdit.carga_horaria_total || "",
-        estado: planToEdit.estado || "vigente",
+        estado: planToEdit.estado || "",
       });
     } else {
       setFormData(initialState);
     }
-    setError(null);
+    setErrors({});
   }, [planToEdit, isOpen]);
 
   const mutation = useMutation({
@@ -54,22 +55,38 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
       onClose();
     },
     onError: (err) => {
-      const validationErrors = err.response?.data?.errors;
-      if (validationErrors) {
-        setError(Object.values(validationErrors)[0][0]);
+      if (err.response?.data?.errors) {
+        setErrors(err.response.data.errors);
       } else {
-        setError(err.response?.data?.message || "Error al guardar el plan.");
+        // Si es otro tipo de error (ej. 500), lo mostramos general
+        setErrors({
+          general: [
+            err.response?.data?.message || "Ocurrió un error inesperado.",
+          ],
+        });
       }
     },
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setErrors({});
     mutation.mutate(planToEdit ? { id: planToEdit.id, ...formData } : formData);
   };
 
   if (!isOpen) return null;
 
+  const renderError = (field) => {
+    if (errors[field]) {
+      return <p className="mt-1 text-xs text-red-500">{errors[field][0]}</p>;
+    }
+    return null;
+  };
+
+  const carreraOptions = carreras.map((carrera) => ({
+    value: carrera.id,
+    label: `${carrera.nombre}`,
+  }));
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col">
@@ -86,10 +103,10 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
+          {errors.general && (
             <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
-              {error}
+              {errors.general[0]}
             </div>
           )}
 
@@ -98,22 +115,47 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Carrera *
             </label>
-            <select
-              required
-              value={formData.carrera_id}
-              onChange={(e) =>
-                setFormData({ ...formData, carrera_id: e.target.value })
+            <Select
+              options={carreraOptions}
+              value={
+                carreraOptions.find(
+                  (opt) => opt.value === formData.carrera_id,
+                ) || null
               }
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
-              disabled={isLoadingCarreras}
-            >
-              <option value="">Seleccione una carrera...</option>
-              {carreras.map((carrera) => (
-                <option key={carrera.id} value={carrera.id}>
-                  {carrera.sigla} - {carrera.nombre}
-                </option>
-              ))}
-            </select>
+              onChange={(selectedOption) =>
+                setFormData({
+                  ...formData,
+                  carrera_id: selectedOption?.value || "",
+                })
+              }
+              placeholder="BUSCAR Y SELECCIONAR CARRERA..."
+              isDisabled={isLoadingCarreras}
+              isClearable={true}
+              noOptionsMessage={() => "NO SE ENCONTRARON CARRERAS"}
+              styles={{
+                control: (base, state) => ({
+                  ...base,
+                  borderColor: errors.carrera_id ? "#f87171" : "#cbd5e1",
+                  borderRadius: "0.5rem",
+                  padding: "2px",
+                  boxShadow: state.isFocused
+                    ? "0 0 0 2px rgba(11, 42, 91, 0.2)"
+                    : "none",
+                  "&:hover": { borderColor: "#94a3b8" },
+                }),
+                option: (base, state) => ({
+                  ...base,
+                  backgroundColor: state.isSelected
+                    ? "#0B2A5B"
+                    : state.isFocused
+                      ? "#f1f5f9"
+                      : "white",
+                  color: state.isSelected ? "white" : "#334155",
+                  cursor: "pointer",
+                }),
+              }}
+            />
+            {renderError("carrera_id")}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -123,15 +165,19 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
               </label>
               <input
                 type="number"
-                required
                 min="1"
                 value={formData.numero}
                 onChange={(e) =>
                   setFormData({ ...formData, numero: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${
+                  errors.numero
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
                 placeholder="Ej. 1"
               />
+              {renderError("numero")}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -142,12 +188,20 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
                 onChange={(e) =>
                   setFormData({ ...formData, estado: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${
+                  errors.estado
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
               >
-                <option value="vigente">Vigente</option>
-                <option value="en_extincion">En Extinción</option>
-                <option value="inactivo">Inactivo</option>
+                <option value="" selected hidden>
+                  -- SELECCIONAR --
+                </option>
+                <option value="vigente">VIGENTE</option>
+                <option value="en_extincion">EN EXTINSIÓN</option>
+                <option value="inactivo">INACTIVO</option>
               </select>
+              {renderError("estado")}
             </div>
           </div>
 
@@ -158,15 +212,19 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
               </label>
               <input
                 type="number"
-                required
                 min="1"
                 value={formData.total_semestres}
                 onChange={(e) =>
                   setFormData({ ...formData, total_semestres: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${
+                  errors.total_semestres
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
                 placeholder="Ej. 6"
               />
+              {renderError("total_semestres")}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -182,9 +240,14 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
                     carga_horaria_total: e.target.value,
                   })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+                className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${
+                  errors.carga_horaria_total
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
                 placeholder="Hrs"
               />
+              {renderError("carga_horaria_total")}
             </div>
           </div>
 
@@ -198,9 +261,14 @@ const PlanEstudioModal = ({ isOpen, onClose, planToEdit }) => {
               onChange={(e) =>
                 setFormData({ ...formData, resolucion: e.target.value })
               }
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none uppercase ${
+                errors.resolucion
+                  ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                  : "border-slate-300"
+              }`}
               placeholder="Ej. RM 045/2024"
             />
+            {renderError("resolucion")}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

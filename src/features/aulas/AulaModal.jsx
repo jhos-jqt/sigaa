@@ -1,56 +1,85 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createAula, updateAula } from "./api";
-import { LuX } from "react-icons/lu";
+import { LuX } from "react-icons/lu"; // <-- Importamos el Toast
 
 const AulaModal = ({ isOpen, onClose, aulaToEdit }) => {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({
+
+  const initialState = {
     codigo: "",
     nombre: "",
-    tipo: "aula",
+    tipo: "",
     capacidad: "",
     ubicacion: "",
-  });
-  const [error, setError] = useState(null);
+  };
 
-  // Cargar datos si es edición
+  const [formData, setFormData] = useState(initialState);
+
+  // Ahora los errores se guardan como un objeto: { codigo: ["Error..."], nombre: [...] }
+  const [errors, setErrors] = useState({});
+
   useEffect(() => {
     if (aulaToEdit) {
-      setFormData(aulaToEdit);
-    } else {
       setFormData({
-        codigo: "",
-        nombre: "",
-        tipo: "aula",
-        capacidad: "",
-        ubicacion: "",
+        codigo: aulaToEdit.codigo || "",
+        nombre: aulaToEdit.nombre || "",
+        tipo: aulaToEdit.tipo || "",
+        capacidad: aulaToEdit.capacidad || "",
+        ubicacion: aulaToEdit.ubicacion || "",
       });
+    } else {
+      setFormData(initialState);
     }
-    setError(null);
+    setErrors({}); // Limpiar errores al abrir/cerrar
   }, [aulaToEdit, isOpen]);
 
   const mutation = useMutation({
     mutationFn: aulaToEdit ? updateAula : createAula,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["aulas"] }); // Recarga la tabla automáticamente
+      queryClient.invalidateQueries({ queryKey: ["aulas"] });
+      Toast.fire({
+        icon: "success",
+        title: aulaToEdit
+          ? "Aula actualizada correctamente"
+          : "Aula creada correctamente",
+      });
       onClose();
     },
     onError: (err) => {
-      setError(err.response?.data?.message || "Ocurrió un error al guardar.");
+      // Capturamos el objeto de errores que envía Laravel (422)
+      if (err.response?.data?.errors) {
+        setErrors(err.response.data.errors);
+      } else {
+        // Si es otro tipo de error (ej. 500), lo mostramos general
+        setErrors({
+          general: [
+            err.response?.data?.message || "Ocurrió un error inesperado.",
+          ],
+        });
+      }
     },
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setErrors({}); // Limpiamos errores previos antes de enviar
     mutation.mutate(aulaToEdit ? { id: aulaToEdit.id, ...formData } : formData);
   };
 
   if (!isOpen) return null;
 
+  // Función auxiliar para pintar el error debajo del input
+  const renderError = (field) => {
+    if (errors[field]) {
+      return <p className="mt-1 text-xs text-red-500">{errors[field][0]}</p>;
+    }
+    return null;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
         {/* Header Modal */}
         <div className="flex justify-between items-center p-5 border-b border-slate-100">
           <h2 className="text-xl font-bold text-slate-800">
@@ -65,10 +94,11 @@ const AulaModal = ({ isOpen, onClose, aulaToEdit }) => {
         </div>
 
         {/* Body Modal */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
-            <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">
-              {error}
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
+          {/* Error General (por si falla algo en el servidor) */}
+          {errors.general && (
+            <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+              {errors.general[0]}
             </div>
           )}
 
@@ -79,18 +109,24 @@ const AulaModal = ({ isOpen, onClose, aulaToEdit }) => {
               </label>
               <input
                 type="text"
-                required
-                value={formData.codigo}
+                value={formData.codigo || ""}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
                     codigo: e.target.value.toUpperCase(),
                   })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+                // Si hay error, el borde se vuelve rojo
+                className={`w-full px-3 py-2 border rounded-lg outline-none uppercase transition-colors focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue ${
+                  errors.codigo
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
                 placeholder="Ej. A-101"
               />
+              {renderError("codigo")}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Tipo *
@@ -100,14 +136,20 @@ const AulaModal = ({ isOpen, onClose, aulaToEdit }) => {
                 onChange={(e) =>
                   setFormData({ ...formData, tipo: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none bg-white"
+                className={`w-full px-3 py-2 border rounded-lg outline-none bg-white transition-colors focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue uppercase ${
+                  errors.tipo
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
               >
+                <option value="">-- Seleccionar --</option>
                 <option value="aula">AULA</option>
                 <option value="laboratorio">LABORATORIO</option>
                 <option value="taller">TALLER</option>
                 <option value="auditorio">AUDITORIO</option>
                 <option value="otro">OTRO</option>
               </select>
+              {renderError("tipo")}
             </div>
           </div>
 
@@ -117,14 +159,18 @@ const AulaModal = ({ isOpen, onClose, aulaToEdit }) => {
             </label>
             <input
               type="text"
-              required
-              value={formData.nombre}
+              value={formData.nombre || ""}
               onChange={(e) =>
                 setFormData({ ...formData, nombre: e.target.value })
               }
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+              className={`w-full px-3 py-2 border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue uppercase ${
+                errors.nombre
+                  ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                  : "border-slate-300"
+              }`}
               placeholder="Ej. Aula de Electromecánica"
             />
+            {renderError("nombre")}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -135,28 +181,38 @@ const AulaModal = ({ isOpen, onClose, aulaToEdit }) => {
               <input
                 type="number"
                 min="1"
-                value={formData.capacidad}
+                value={formData.capacidad || ""}
                 onChange={(e) =>
                   setFormData({ ...formData, capacidad: e.target.value })
                 }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
+                className={`w-full px-3 py-2 border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue uppercase ${
+                  errors.capacidad
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                    : "border-slate-300"
+                }`}
                 placeholder="Ej. 40"
               />
+              {renderError("capacidad")}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Ubicación
-              </label>
-              <input
-                type="text"
-                value={formData.ubicacion}
-                onChange={(e) =>
-                  setFormData({ ...formData, ubicacion: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue outline-none"
-                placeholder="Ej. Piso 2"
-              />
-            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Ubicación
+            </label>
+            <textarea
+              type="text"
+              value={formData.ubicacion || ""}
+              onChange={(e) =>
+                setFormData({ ...formData, ubicacion: e.target.value })
+              }
+              className={`w-full px-3 py-2 border rounded-lg outline-none transition-colors focus:ring-2 focus:ring-navy-blue/20 focus:border-navy-blue uppercase ${
+                errors.ubicacion
+                  ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                  : "border-slate-300"
+              }`}
+              placeholder="Ej. Edificio A, Piso 2"
+            />
+            {renderError("ubicacion")}
           </div>
 
           {/* Footer Modal */}

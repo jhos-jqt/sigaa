@@ -2,12 +2,11 @@ import { api } from "../../services/api";
 
 const API_URL = "/api/planes";
 
-export const fetchPlanes = async ({ page = 1, search = "" }) => {
-  const { data } = await api.get(API_URL, { params: { page, search } });
+export const fetchPlanes = async () => {
+  const { data } = await api.get(API_URL);
   return data;
 };
 
-// Obtener lista simple de carreras para el select
 export const fetchCarrerasSelect = async () => {
   const { data } = await api.get(`${API_URL}/carreras`);
   return data;

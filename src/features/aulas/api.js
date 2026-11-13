@@ -2,10 +2,8 @@ import { api } from "../../services/api";
 
 const API_URL = "/api/aulas";
 
-export const fetchAulas = async ({ page = 1, search = "" }) => {
-  const { data } = await api.get(API_URL, {
-    params: { page, search },
-  });
+export const fetchAulas = async () => {
+  const { data } = await api.get(API_URL);
   return data;
 };
 

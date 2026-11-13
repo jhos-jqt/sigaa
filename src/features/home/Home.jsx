@@ -17,6 +17,7 @@ import {
   LuClipboardList,
   LuChartPie,
 } from "react-icons/lu";
+import Loader from "../../components/Loader";
 // import LinkBreadcrumb from '../components/breadcrumbs/LinkBreadcrumb'; // Lo dejamos comentado si no lo usas aún
 //import avatarImage from '../assets/images/avatard.png';
 
@@ -53,34 +54,7 @@ const Home = () => {
   }, []);
 
   if (isLoading) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-slate-50 z-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="w-16 h-16 border-4 border-navy-blue/20 rounded-full animate-spin">
-              <div className="absolute inset-0 border-4 border-navy-blue rounded-full border-t-transparent animate-spin"></div>
-            </div>
-          </div>
-          <div className="flex gap-1">
-            <span
-              className="w-2 h-2 bg-navy-blue rounded-full animate-bounce"
-              style={{ animationDelay: "0ms" }}
-            ></span>
-            <span
-              className="w-2 h-2 bg-navy-blue rounded-full animate-bounce"
-              style={{ animationDelay: "150ms" }}
-            ></span>
-            <span
-              className="w-2 h-2 bg-navy-blue rounded-full animate-bounce"
-              style={{ animationDelay: "300ms" }}
-            ></span>
-          </div>
-          <p className="text-slate-500 text-sm font-medium animate-pulse">
-            Cargando sistema...
-          </p>
-        </div>
-      </div>
-    );
+    return <Loader />;
   }
 
   return (
